@@ -1,6 +1,6 @@
 import React from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, Badge, IconButton } from '@mui/material';
-import { ShoppingCart, AccountCircle } from '@mui/icons-material';
+import { AppBar, Toolbar, Typography, Button, Box, Badge, IconButton, Menu, MenuItem } from '@mui/material';
+import { ShoppingCart, AccountCircle, AdminPanelSettings } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/hooks/useCart';
@@ -13,10 +13,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { cart } = useCart();
+  const [adminMenuAnchor, setAdminMenuAnchor] = React.useState<null | HTMLElement>(null);
 
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleAdminMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAdminMenuAnchor(event.currentTarget);
+  };
+
+  const handleAdminMenuClose = () => {
+    setAdminMenuAnchor(null);
   };
 
   const cartItemCount = cart?.items.reduce((total, item) => total + item.quantity, 0) || 0;
@@ -45,6 +54,30 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <ShoppingCart />
                 </Badge>
               </IconButton>
+              
+              {user.role === 'admin' && (
+                <>
+                  <Button
+                    color="inherit"
+                    startIcon={<AdminPanelSettings />}
+                    onClick={handleAdminMenuOpen}
+                  >
+                    Admin
+                  </Button>
+                  <Menu
+                    anchorEl={adminMenuAnchor}
+                    open={Boolean(adminMenuAnchor)}
+                    onClose={handleAdminMenuClose}
+                  >
+                    <MenuItem onClick={() => { navigate('/admin/orders'); handleAdminMenuClose(); }}>
+                      Order Management
+                    </MenuItem>
+                    <MenuItem onClick={() => { navigate('/admin/recommendations'); handleAdminMenuClose(); }}>
+                      Recommendations
+                    </MenuItem>
+                  </Menu>
+                </>
+              )}
               
               <Button 
                 color="inherit" 

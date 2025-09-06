@@ -13,6 +13,7 @@ import { ShoppingCart } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { Product } from '@/types';
 import { useCart } from '@/hooks/useCart';
+import { useRecommendations } from '@/hooks/useRecommendations';
 
 interface ProductCardProps {
   product: Product;
@@ -21,13 +22,16 @@ interface ProductCardProps {
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { trackInteraction } = useRecommendations();
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     addToCart(product._id, 1);
+    trackInteraction(product._id, 'cart_add');
   };
 
   const handleCardClick = () => {
+    trackInteraction(product._id, 'view');
     navigate(`/products/${product._id}`);
   };
 

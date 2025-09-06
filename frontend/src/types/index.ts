@@ -95,3 +95,17 @@ export interface ApiResponse<T> {
   };
   timestamp: string;
 }
+
+export interface Recommendation {
+  productId: string;
+  product: Product;
+  score: number;
+  reason: string;
+}
+
+export interface UserInteraction {
+  userId: string;
+  productId: string;
+  interactionType: 'view' | 'cart_add' | 'purchase';
+  sessionId?: string;
+}

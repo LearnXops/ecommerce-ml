@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -17,6 +17,8 @@ import {
 import { ShoppingCart, ArrowBack } from '@mui/icons-material';
 import { useProduct } from '@/hooks/useProducts';
 import { useCart } from '@/hooks/useCart';
+import { useRecommendations } from '@/hooks/useRecommendations';
+import RecommendationSection from '@/components/RecommendationSection';
 
 const ProductDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,12 +27,21 @@ const ProductDetail: React.FC = () => {
   
   const { data: product, isLoading, error } = useProduct(id!);
   const { addToCart } = useCart();
+  const { trackInteraction } = useRecommendations();
 
   const handleAddToCart = () => {
     if (product) {
       addToCart(product._id, quantity);
+      trackInteraction(product._id, 'cart_add');
     }
   };
+
+  // Track product view when component mounts
+  useEffect(() => {
+    if (product?._id) {
+      trackInteraction(product._id, 'view');
+    }
+  }, [product?._id, trackInteraction]);
 
   const handleQuantityChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(event.target.value);
@@ -199,6 +210,15 @@ const ProductDetail: React.FC = () => {
           </Box>
         </Grid>
       </Grid>
+
+      {/* Related Products Recommendations */}
+      <Box sx={{ mt: 6 }}>
+        <RecommendationSection 
+          title="You Might Also Like" 
+          limit={4}
+          showReason={false}
+        />
+      </Box>
     </Container>
   );
 };

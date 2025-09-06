@@ -10,9 +10,12 @@ import {
 } from '@mui/material';
 import ProductCard from '@/components/ProductCard';
 import ProductFilters from '@/components/ProductFilters';
+import RecommendationSection from '@/components/RecommendationSection';
 import { useProducts } from '@/hooks/useProducts';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ProductList: React.FC = () => {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
@@ -70,6 +73,15 @@ const ProductList: React.FC = () => {
       <Typography variant="h4" component="h1" gutterBottom>
         Products
       </Typography>
+
+      {/* Show recommendations for logged-in users */}
+      {user && (
+        <RecommendationSection 
+          title="Recommended for You" 
+          limit={6}
+          showReason={true}
+        />
+      )}
 
       <ProductFilters
         search={search}

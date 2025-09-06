@@ -24,6 +24,8 @@ export interface IUser extends BaseDocument {
   lastName: string;
   address?: Address;
   role: 'customer' | 'admin';
+  comparePassword(candidatePassword: string): Promise<boolean>;
+  getFullName(): string;
 }
 
 // Product interface

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
+import { withDatabaseRetry } from '../utils/retry';
 
 interface ConnectionOptions {
   maxRetries?: number;
@@ -108,8 +109,11 @@ class DatabaseConnection {
         return { status: 'error', message: 'Database not connected' };
       }
 
-      // Ping the database
-      await mongoose.connection.db.admin().ping();
+      // Ping the database with retry logic
+      await withDatabaseRetry(async () => {
+        await mongoose.connection.db.admin().ping();
+      });
+      
       return { status: 'healthy', message: 'Database connection is healthy' };
     } catch (error) {
       return { 
@@ -117,6 +121,11 @@ class DatabaseConnection {
         message: `Database health check failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
       };
     }
+  }
+
+  // Helper method to execute database operations with retry
+  public async executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+    return withDatabaseRetry(operation);
   }
 
   private delay(ms: number): Promise<void> {

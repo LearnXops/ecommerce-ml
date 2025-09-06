@@ -117,14 +117,24 @@ const Profile: React.FC = () => {
           </Button>
           
           {user.role === 'admin' && (
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<ShoppingBag />}
-              onClick={() => navigate('/admin/orders')}
-            >
-              Manage Orders
-            </Button>
+            <>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<ShoppingBag />}
+                onClick={() => navigate('/admin/dashboard')}
+              >
+                Admin Dashboard
+              </Button>
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<ShoppingBag />}
+                onClick={() => navigate('/admin/orders')}
+              >
+                Manage Orders
+              </Button>
+            </>
           )}
         </Box>
       </Paper>

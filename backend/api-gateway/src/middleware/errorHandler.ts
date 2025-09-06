@@ -9,33 +9,53 @@ interface ErrorResponse {
     details?: any;
   };
   timestamp: string;
+  requestId?: string;
+}
+
+interface AppError extends Error {
+  statusCode?: number;
+  code?: string;
+  details?: any;
+  isOperational?: boolean;
 }
 
 export const errorHandler = (
-  error: any,
+  error: AppError,
   req: Request,
   res: Response,
   _next: NextFunction
 ) => {
-  // Log the error
+  // Generate request ID for tracking
+  const requestId = req.headers['x-request-id'] as string || 
+                   Math.random().toString(36).substring(2, 15);
+
+  // Log the error with context
   logger.error('API Gateway Error:', {
+    requestId,
     error: error.message,
     stack: error.stack,
     url: req.url,
     method: req.method,
     ip: req.ip,
-    userAgent: req.get('User-Agent')
+    userAgent: req.get('User-Agent'),
+    body: req.body,
+    query: req.query,
+    params: req.params,
+    statusCode: error.statusCode,
+    errorCode: error.code,
+    isOperational: error.isOperational
   });
 
   // Default error response
-  let statusCode = 500;
+  let statusCode = error.statusCode || 500;
   let errorResponse: ErrorResponse = {
     success: false,
     error: {
-      code: 'INTERNAL_ERROR',
-      message: 'An internal server error occurred'
+      code: error.code || 'INTERNAL_ERROR',
+      message: error.message || 'An internal server error occurred'
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    requestId
   };
 
   // Handle specific error types
@@ -46,11 +66,17 @@ export const errorHandler = (
       message: 'Invalid input data',
       details: error.details
     };
-  } else if (error.name === 'UnauthorizedError') {
+  } else if (error.name === 'UnauthorizedError' || error.name === 'JsonWebTokenError') {
     statusCode = 401;
     errorResponse.error = {
       code: 'UNAUTHORIZED',
       message: 'Authentication required'
+    };
+  } else if (error.name === 'TokenExpiredError') {
+    statusCode = 401;
+    errorResponse.error = {
+      code: 'TOKEN_EXPIRED',
+      message: 'Authentication token has expired'
     };
   } else if (error.name === 'ForbiddenError') {
     statusCode = 403;
@@ -64,6 +90,18 @@ export const errorHandler = (
       code: 'NOT_FOUND',
       message: 'Resource not found'
     };
+  } else if (error.name === 'ConflictError') {
+    statusCode = 409;
+    errorResponse.error = {
+      code: 'CONFLICT',
+      message: 'Resource conflict'
+    };
+  } else if (error.name === 'TooManyRequestsError') {
+    statusCode = 429;
+    errorResponse.error = {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many requests, please try again later'
+    };
   } else if (error.code === 'ECONNREFUSED') {
     statusCode = 503;
     errorResponse.error = {
@@ -76,10 +114,22 @@ export const errorHandler = (
       code: 'GATEWAY_TIMEOUT',
       message: 'Service request timeout'
     };
+  } else if (error.name === 'MongoError' || error.name === 'MongooseError') {
+    statusCode = 500;
+    errorResponse.error = {
+      code: 'DATABASE_ERROR',
+      message: 'Database operation failed'
+    };
   }
 
-  // Don't expose internal error details in production
-  if (process.env['NODE_ENV'] === 'production') {
+  // Add error details for development
+  if (process.env.NODE_ENV === 'development') {
+    errorResponse.error.details = {
+      stack: error.stack,
+      ...error.details
+    };
+  } else {
+    // Don't expose internal error details in production
     delete errorResponse.error.details;
   }
 

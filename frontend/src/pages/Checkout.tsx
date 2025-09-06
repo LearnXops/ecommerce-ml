@@ -17,6 +17,7 @@ import {
 import { ArrowBack, ShoppingCartCheckout } from '@mui/icons-material';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/hooks/useCart';
+import { useRecommendations } from '@/hooks/useRecommendations';
 import ShippingForm from '@/components/checkout/ShippingForm';
 import PaymentForm from '@/components/checkout/PaymentForm';
 import OrderSummary from '@/components/checkout/OrderSummary';
@@ -41,6 +42,7 @@ const Checkout: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { cart, clearCart } = useCart();
+  const { trackInteraction } = useRecommendations();
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +108,11 @@ const Checkout: React.FC = () => {
       const response = await api.post<ApiResponse<Order>>('/orders', orderData);
       
       if (response.data.success && response.data.data) {
+        // Track purchase interactions for all items
+        for (const item of cart.items) {
+          await trackInteraction(item.productId, 'purchase');
+        }
+        
         // Clear cart after successful order
         await clearCart();
         
