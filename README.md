@@ -34,27 +34,45 @@ ecommerce-app/
 
 ## Quick Start
 
-1. **Clone the repository and install dependencies:**
+### Docker Compose (Recommended)
+
+1. **Clone the repository:**
    ```bash
-   npm install
+   git clone <repository-url>
+   cd ecommerce-app
    ```
 
-2. **Copy environment configuration:**
+2. **Start the development environment:**
    ```bash
-   cp .env.example .env
+   ./scripts/deploy-docker.sh dev
    ```
-   Edit `.env` file with your configuration values.
 
-3. **Start the development environment:**
+3. **Validate deployment:**
    ```bash
-   npm run dev
+   ./scripts/validate-deployment.sh docker
    ```
-   This will start all services using Docker Compose.
 
 4. **Access the application:**
    - Frontend: http://localhost:3000
-   - API Gateway: http://localhost:4000
+   - API Gateway: http://localhost:4000/api
    - Individual services: ports 3001-3005
+
+### Kubernetes with Kind
+
+1. **Deploy to Kind cluster:**
+   ```bash
+   ./scripts/deploy-k8s.sh deploy
+   ```
+
+2. **Validate deployment:**
+   ```bash
+   ./scripts/validate-deployment.sh k8s
+   ```
+
+3. **Get service URLs:**
+   ```bash
+   ./scripts/deploy-k8s.sh urls
+   ```
 
 ## Development
 
@@ -146,14 +164,31 @@ The `docker-compose.yml` includes:
 - Redis cache with persistence
 - Proper networking and volume management
 
-## Production Deployment
+## Deployment Options
 
-For production deployment using Kubernetes:
+### 🐳 Docker Compose
+- **Development**: `./scripts/deploy-docker.sh dev`
+- **Production**: `./scripts/deploy-docker.sh prod`
 
-1. Build production images
-2. Deploy to Kubernetes cluster
-3. Configure ingress and load balancing
-4. Set up monitoring and logging
+### ☸️ Kubernetes (Kind)
+- **Full deployment**: `./scripts/deploy-k8s.sh deploy`
+- **Status check**: `./scripts/deploy-k8s.sh status`
+
+### 📚 Documentation
+- [Complete Deployment Guide](./docs/deployment.md)
+- [Deployment README](./docs/README-deployment.md)
+
+### 🔧 Available Scripts
+```bash
+# Docker Compose
+./scripts/deploy-docker.sh {dev|prod|logs|stop|clean|health}
+
+# Kubernetes
+./scripts/deploy-k8s.sh {deploy|status|urls|logs|clean}
+
+# Validation
+./scripts/validate-deployment.sh {docker|k8s}
+```
 
 ## Contributing
 

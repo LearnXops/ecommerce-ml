@@ -10,14 +10,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: development
+      target: production
     ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://localhost:4000/api
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "80:80"
     networks:
       - ecommerce-network
     depends_on:
@@ -30,20 +25,17 @@ services:
     build:
       context: ./backend/api-gateway
       dockerfile: Dockerfile
-      target: development
+      target: production
     ports:
       - "4000:3000"
     environment:
-      - NODE_ENV=development
-      - JWT_SECRET=your-jwt-secret-key
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
       - AUTH_SERVICE_URL=http://auth-service:3001
       - PRODUCT_SERVICE_URL=http://product-service:3002
       - CART_SERVICE_URL=http://cart-service:3003
       - ORDER_SERVICE_URL=http://order-service:3004
       - ML_SERVICE_URL=http://ml-service:3005
-    volumes:
-      - ./backend/api-gateway:/app
-      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
@@ -70,18 +62,13 @@ services:
     build:
       context: ./backend/auth-service
       dockerfile: Dockerfile
-      target: development
-    ports:
-      - "3001:3001"
+      target: production
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3001
-      - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_auth?authSource=admin
-      - JWT_SECRET=your-jwt-secret-key
+      - MONGODB_URI=mongodb://admin:${MONGODB_PASSWORD}@mongodb:27017/ecommerce_auth?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=7d
-    volumes:
-      - ./backend/auth-service:/app
-      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
@@ -100,16 +87,11 @@ services:
     build:
       context: ./backend/product-service
       dockerfile: Dockerfile
-      target: development
-    ports:
-      - "3002:3002"
+      target: production
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3002
-      - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_products?authSource=admin
-    volumes:
-      - ./backend/product-service:/app
-      - /app/node_modules
+      - MONGODB_URI=mongodb://admin:${MONGODB_PASSWORD}@mongodb:27017/ecommerce_products?authSource=admin
     networks:
       - ecommerce-network
     depends_on:
@@ -128,16 +110,11 @@ services:
     build:
       context: ./backend/cart-service
       dockerfile: Dockerfile
-      target: development
-    ports:
-      - "3003:3003"
+      target: production
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3003
       - REDIS_URL=redis://redis:6379
-    volumes:
-      - ./backend/cart-service:/app
-      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
@@ -156,20 +133,15 @@ services:
     build:
       context: ./backend/order-service
       dockerfile: Dockerfile
-      target: development
-    ports:
-      - "3004:3004"
+      target: production
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3004
-      - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_orders?authSource=admin
-      - EMAIL_HOST=smtp.gmail.com
-      - EMAIL_PORT=587
-      - EMAIL_USER=your-email@gmail.com
-      - EMAIL_PASS=your-app-password
-    volumes:
-      - ./backend/order-service:/app
-      - /app/node_modules
+      - MONGODB_URI=mongodb://admin:${MONGODB_PASSWORD}@mongodb:27017/ecommerce_orders?authSource=admin
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASS=${EMAIL_PASS}
     networks:
       - ecommerce-network
     depends_on:
@@ -188,15 +160,11 @@ services:
     build:
       context: ./ml-service
       dockerfile: Dockerfile
-      target: development
-    ports:
-      - "3005:3005"
+      target: production
     environment:
-      - FLASK_ENV=development
+      - FLASK_ENV=production
       - PORT=3005
-      - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_ml?authSource=admin
-    volumes:
-      - ./ml-service:/app
+      - MONGODB_URI=mongodb://admin:${MONGODB_PASSWORD}@mongodb:27017/ecommerce_ml?authSource=admin
     networks:
       - ecommerce-network
     depends_on:
@@ -213,11 +181,9 @@ services:
   # MongoDB Database
   mongodb:
     image: mongo:7
-    ports:
-      - "27017:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD}
     volumes:
       - mongodb_data:/data/db
       - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
@@ -235,8 +201,6 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     networks:

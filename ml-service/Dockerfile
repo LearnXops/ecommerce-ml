@@ -29,10 +29,11 @@ FROM python:3.11-slim as production
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including curl for health checks
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
@@ -51,6 +52,10 @@ USER appuser
 
 # Expose port
 EXPOSE 3005
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3005/health || exit 1
 
 # Start the application with gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:3005", "--workers", "4", "app:app"]

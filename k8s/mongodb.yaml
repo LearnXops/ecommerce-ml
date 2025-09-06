@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: ecommerce
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: ecommerce
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:7
+        ports:
+        - containerPort: 27017
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: "admin"
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ecommerce-secrets
+              key: MONGODB_PASSWORD
+        volumeMounts:
+        - name: mongodb-storage
+          mountPath: /data/db
+        - name: mongo-init
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: mongodb-storage
+        persistentVolumeClaim:
+          claimName: mongodb-pvc
+      - name: mongo-init
+        configMap:
+          name: mongo-init-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: ecommerce
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-init-script
+  namespace: ecommerce
+data:
+  mongo-init.js: |
+    // MongoDB initialization script for ecommerce application
+
+    // Switch to admin database for authentication
+    db = db.getSiblingDB('admin');
+
+    // Create databases and collections
+    const databases = ['ecommerce_auth', 'ecommerce_products', 'ecommerce_orders', 'ecommerce_ml'];
+
+    databases.forEach(dbName => {
+      print(`Initializing database: ${dbName}`);
+      
+      // Switch to the database
+      db = db.getSiblingDB(dbName);
+      
+      // Create a dummy collection to ensure database exists
+      db.createCollection('_init');
+      
+      // Create indexes based on database type
+      if (dbName === 'ecommerce_auth') {
+        db.users.createIndex({ email: 1 }, { unique: true });
+        db.users.createIndex({ createdAt: 1 });
+      } else if (dbName === 'ecommerce_products') {
+        db.products.createIndex({ name: "text", description: "text" });
+        db.products.createIndex({ category: 1 });
+        db.products.createIndex({ price: 1 });
+        db.products.createIndex({ createdAt: 1 });
+      } else if (dbName === 'ecommerce_orders') {
+        db.orders.createIndex({ userId: 1 });
+        db.orders.createIndex({ status: 1 });
+        db.orders.createIndex({ createdAt: 1 });
+      } else if (dbName === 'ecommerce_ml') {
+        db.userinteractions.createIndex({ userId: 1, productId: 1 });
+        db.userinteractions.createIndex({ userId: 1, timestamp: 1 });
+        db.userinteractions.createIndex({ productId: 1, interactionType: 1 });
+      }
+      
+      print(`Database ${dbName} initialized successfully`);
+    });
+
+    print('MongoDB initialization completed');
