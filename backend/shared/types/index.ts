@@ -46,6 +46,22 @@ export interface OrderItem {
   name: string; // Store product name at time of order
 }
 
+// Enums for order and payment status
+export enum OrderStatus {
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  SHIPPED = 'shipped',
+  DELIVERED = 'delivered',
+  CANCELLED = 'cancelled'
+}
+
+export enum PaymentStatus {
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  REFUNDED = 'refunded'
+}
+
 // Order interface
 export interface IOrder extends BaseDocument {
   userId: ObjectId;
