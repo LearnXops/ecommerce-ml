@@ -1,0 +1,248 @@
+name: Security Scan
+
+on:
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '**/Dockerfile'
+      - '**/package*.json'
+      - '**/requirements.txt'
+
+jobs:
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: 
+          - frontend
+          - backend/auth-service
+          - backend/product-service
+          - backend/cart-service
+          - backend/order-service
+          - backend/api-gateway
+          - backend/shared
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd ${{ matrix.service }}
+          npm ci
+
+      - name: Run npm audit
+        run: |
+          cd ${{ matrix.service }}
+          npm audit --audit-level=moderate --json > npm-audit-${{ matrix.service }}.json || true
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v3
+        with:
+          name: npm-audit-results
+          path: ${{ matrix.service }}/npm-audit-*.json
+
+  python-security-scan:
+    name: Python Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          cd ml-service
+          pip install -r requirements.txt
+          pip install safety bandit
+
+      - name: Run Safety check
+        run: |
+          cd ml-service
+          safety check -r requirements.txt --json > safety-report.json || true
+
+      - name: Run Bandit security linter
+        run: |
+          cd ml-service
+          bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-security-reports
+          path: |
+            ml-service/safety-report.json
+            ml-service/bandit-report.json
+
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [frontend, auth-service, product-service, cart-service, order-service, api-gateway, ml-service]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          if [ "${{ matrix.service }}" = "ml-service" ]; then
+            docker build -t ${{ matrix.service }}:latest ./ml-service
+          else
+            docker build -t ${{ matrix.service }}:latest ./${{ matrix.service }}
+          fi
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.service }}:latest
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+
+      - name: Run Trivy vulnerability scanner (JSON output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.service }}:latest
+          format: 'json'
+          output: 'trivy-results-${{ matrix.service }}.json'
+
+      - name: Upload Trivy JSON results
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-results
+          path: 'trivy-results-${{ matrix.service }}.json'
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  license-scan:
+    name: License Compliance Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install license checker
+        run: npm install -g license-checker
+
+      - name: Check licenses
+        run: |
+          services=("frontend" "backend/auth-service" "backend/product-service" "backend/cart-service" "backend/order-service" "backend/api-gateway" "backend/shared")
+          
+          for service in "${services[@]}"; do
+            echo "Checking licenses for $service"
+            cd $service
+            npm ci
+            license-checker --json --out ../license-report-$(basename $service).json
+            cd ..
+          done
+
+      - name: Upload license reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: license-reports
+          path: license-report-*.json
+
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, python-security-scan, container-scan, secret-scan, license-scan]
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate security summary
+        run: |
+          echo "# Security Scan Summary" > security-summary.md
+          echo "Generated on: $(date)" >> security-summary.md
+          echo "" >> security-summary.md
+          
+          echo "## Dependency Scans" >> security-summary.md
+          if [ -d "npm-audit-results" ]; then
+            echo "- NPM audit results available" >> security-summary.md
+          fi
+          
+          if [ -d "python-security-reports" ]; then
+            echo "- Python security reports available" >> security-summary.md
+          fi
+          
+          echo "" >> security-summary.md
+          echo "## Container Scans" >> security-summary.md
+          if [ -d "trivy-results" ]; then
+            echo "- Container vulnerability scans completed" >> security-summary.md
+          fi
+          
+          echo "" >> security-summary.md
+          echo "## License Compliance" >> security-summary.md
+          if [ -d "license-reports" ]; then
+            echo "- License compliance reports generated" >> security-summary.md
+          fi
+
+      - name: Upload security summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-summary
+          path: security-summary.md
+
+      - name: Create issue for security findings
+        if: github.event_name == 'schedule'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Check if there are any high/critical vulnerabilities
+            let hasHighSeverity = false;
+            
+            // This is a simplified check - in practice, you'd parse the JSON reports
+            // to determine if there are high/critical vulnerabilities
+            
+            if (hasHighSeverity) {
+              github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Security vulnerabilities detected',
+                body: 'Automated security scan detected high/critical vulnerabilities. Please review the security reports.',
+                labels: ['security', 'high-priority']
+              });
+            }

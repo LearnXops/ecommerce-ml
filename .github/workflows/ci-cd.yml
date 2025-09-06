@@ -1,0 +1,667 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.9'
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # Code Quality and Security Checks
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+          cd ../backend/shared && npm ci
+          cd ../auth-service && npm ci
+          cd ../product-service && npm ci
+          cd ../cart-service && npm ci
+          cd ../order-service && npm ci
+          cd ../api-gateway && npm ci
+          cd ../../integration-tests && npm ci
+
+      - name: Run ESLint
+        run: |
+          npm run lint
+          cd frontend && npm run lint
+          cd ../backend/auth-service && npm run lint
+          cd ../product-service && npm run lint
+          cd ../cart-service && npm run lint
+          cd ../order-service && npm run lint
+          cd ../api-gateway && npm run lint
+
+      - name: Run Prettier check
+        run: |
+          npm run format:check
+          cd frontend && npm run format:check
+
+      - name: TypeScript type checking
+        run: |
+          cd frontend && npm run type-check
+          cd ../backend/auth-service && npm run type-check
+          cd ../product-service && npm run type-check
+          cd ../cart-service && npm run type-check
+          cd ../order-service && npm run type-check
+          cd ../api-gateway && npm run type-check
+
+      - name: Security audit
+        run: |
+          npm audit --audit-level=high
+          cd frontend && npm audit --audit-level=high
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Python security checks
+        run: |
+          cd ml-service
+          pip install safety bandit
+          safety check -r requirements.txt
+          bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            ml-service/bandit-report.json
+            npm-audit.json
+
+  # Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth-service, product-service, cart-service, order-service, api-gateway, shared]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd backend/${{ matrix.service }}
+          npm ci
+
+      - name: Run unit tests
+        run: |
+          cd backend/${{ matrix.service }}
+          npm run test:coverage
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: backend/${{ matrix.service }}/coverage/lcov.info
+          flags: ${{ matrix.service }}
+          name: ${{ matrix.service }}-coverage
+
+  # Frontend Tests
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run unit tests
+        run: |
+          cd frontend
+          npm run test:coverage
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+
+  # ML Service Tests
+  ml-tests:
+    name: ML Service Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd ml-service
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run ML tests
+        run: |
+          cd ml-service
+          pytest --cov=src --cov-report=xml --cov-report=html
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ml-service/coverage.xml
+          flags: ml-service
+          name: ml-service-coverage
+
+  # Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend/integration-tests && npm ci
+
+      - name: Wait for services
+        run: |
+          timeout 60 bash -c 'until mongosh --eval "db.adminCommand(\"ping\")" > /dev/null 2>&1; do sleep 2; done'
+          timeout 60 bash -c 'until redis-cli ping > /dev/null 2>&1; do sleep 2; done'
+
+      - name: Run integration tests
+        env:
+          MONGODB_URI: mongodb://localhost:27017/ecommerce-test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-jwt-secret
+        run: |
+          cd backend/integration-tests
+          npm test
+
+  # E2E Tests
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Start application
+        run: |
+          docker-compose up -d
+          timeout 120 bash -c 'until curl -f http://localhost:4000/health > /dev/null 2>&1; do sleep 5; done'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run E2E tests
+        run: |
+          cd frontend
+          npm run test:e2e:headless
+
+      - name: Upload E2E artifacts
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: e2e-artifacts
+          path: |
+            frontend/cypress/screenshots
+            frontend/cypress/videos
+
+      - name: Stop application
+        if: always()
+        run: docker-compose down -v
+
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Start application
+        run: |
+          docker-compose up -d
+          timeout 120 bash -c 'until curl -f http://localhost:4000/health > /dev/null 2>&1; do sleep 5; done'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd scripts && npm ci
+
+      - name: Run performance tests
+        env:
+          API_BASE_URL: http://localhost:4000
+          CONCURRENT_USERS: 20
+          REQUESTS_PER_USER: 50
+          TEST_DURATION: 60
+        run: |
+          chmod +x scripts/run-performance-tests.sh
+          ./scripts/run-performance-tests.sh
+
+      - name: Upload performance reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: performance-reports
+          path: |
+            backend/shared/performance-report.json
+            scripts/load-test-report.json
+
+      - name: Stop application
+        if: always()
+        run: docker-compose down -v
+
+  # Build and Push Images
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, frontend-tests, ml-tests]
+    if: github.event_name == 'push'
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push images
+        id: build
+        run: |
+          services=("frontend" "auth-service" "product-service" "cart-service" "order-service" "api-gateway" "ml-service")
+          
+          for service in "${services[@]}"; do
+            echo "Building $service..."
+            
+            if [ "$service" = "ml-service" ]; then
+              docker buildx build \
+                --platform linux/amd64,linux/arm64 \
+                --push \
+                --tag ghcr.io/${{ github.repository }}/$service:${{ github.sha }} \
+                --tag ghcr.io/${{ github.repository }}/$service:latest \
+                ./$service
+            else
+              docker buildx build \
+                --platform linux/amd64,linux/arm64 \
+                --push \
+                --tag ghcr.io/${{ github.repository }}/$service:${{ github.sha }} \
+                --tag ghcr.io/${{ github.repository }}/$service:latest \
+                ./$service
+            fi
+          done
+
+  # Security Scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: github.event_name == 'push'
+    strategy:
+      matrix:
+        service: [frontend, auth-service, product-service, cart-service, order-service, api-gateway, ml-service]
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [integration-tests, e2e-tests, build-images, security-scan]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.ecommerce.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region us-west-2 --name ecommerce-staging
+
+      - name: Deploy to staging
+        run: |
+          # Update image tags in Kubernetes manifests
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}|g" k8s/frontend.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/auth-service:${{ github.sha }}|g" k8s/auth-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/product-service:${{ github.sha }}|g" k8s/product-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/cart-service:${{ github.sha }}|g" k8s/cart-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/order-service:${{ github.sha }}|g" k8s/order-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/api-gateway:${{ github.sha }}|g" k8s/api-gateway.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/ml-service:${{ github.sha }}|g" k8s/ml-service.yaml
+          
+          # Apply Kubernetes manifests
+          kubectl apply -f k8s/ -n ecommerce-staging
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/frontend -n ecommerce-staging --timeout=300s
+          kubectl rollout status deployment/auth-service -n ecommerce-staging --timeout=300s
+          kubectl rollout status deployment/product-service -n ecommerce-staging --timeout=300s
+          kubectl rollout status deployment/cart-service -n ecommerce-staging --timeout=300s
+          kubectl rollout status deployment/order-service -n ecommerce-staging --timeout=300s
+          kubectl rollout status deployment/api-gateway -n ecommerce-staging --timeout=300s
+          kubectl rollout status deployment/ml-service -n ecommerce-staging --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          # Wait for services to be ready
+          sleep 30
+          
+          # Get staging URL
+          STAGING_URL=$(kubectl get service api-gateway -n ecommerce-staging -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          
+          # Run basic health checks
+          curl -f http://$STAGING_URL/health
+          curl -f http://$STAGING_URL/api/products
+
+      - name: Notify deployment
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          message: |
+            Staging deployment ${{ job.status }}
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref }}
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, performance-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://ecommerce.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region us-west-2 --name ecommerce-production
+
+      - name: Blue-Green Deployment
+        run: |
+          # Create new deployment with green suffix
+          sed -i "s|name: frontend|name: frontend-green|g" k8s/frontend.yaml
+          sed -i "s|name: auth-service|name: auth-service-green|g" k8s/auth-service.yaml
+          sed -i "s|name: product-service|name: product-service-green|g" k8s/product-service.yaml
+          sed -i "s|name: cart-service|name: cart-service-green|g" k8s/cart-service.yaml
+          sed -i "s|name: order-service|name: order-service-green|g" k8s/order-service.yaml
+          sed -i "s|name: api-gateway|name: api-gateway-green|g" k8s/api-gateway.yaml
+          sed -i "s|name: ml-service|name: ml-service-green|g" k8s/ml-service.yaml
+          
+          # Update image tags
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}|g" k8s/frontend.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/auth-service:${{ github.sha }}|g" k8s/auth-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/product-service:${{ github.sha }}|g" k8s/product-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/cart-service:${{ github.sha }}|g" k8s/cart-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/order-service:${{ github.sha }}|g" k8s/order-service.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/api-gateway:${{ github.sha }}|g" k8s/api-gateway.yaml
+          sed -i "s|image: .*|image: ghcr.io/${{ github.repository }}/ml-service:${{ github.sha }}|g" k8s/ml-service.yaml
+          
+          # Deploy green environment
+          kubectl apply -f k8s/ -n ecommerce-production
+          
+          # Wait for green deployment to be ready
+          kubectl rollout status deployment/frontend-green -n ecommerce-production --timeout=600s
+          kubectl rollout status deployment/auth-service-green -n ecommerce-production --timeout=600s
+          kubectl rollout status deployment/product-service-green -n ecommerce-production --timeout=600s
+          kubectl rollout status deployment/cart-service-green -n ecommerce-production --timeout=600s
+          kubectl rollout status deployment/order-service-green -n ecommerce-production --timeout=600s
+          kubectl rollout status deployment/api-gateway-green -n ecommerce-production --timeout=600s
+          kubectl rollout status deployment/ml-service-green -n ecommerce-production --timeout=600s
+
+      - name: Run production smoke tests
+        run: |
+          # Get green deployment URL
+          GREEN_URL=$(kubectl get service api-gateway-green -n ecommerce-production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          
+          # Run comprehensive health checks
+          curl -f http://$GREEN_URL/health
+          curl -f http://$GREEN_URL/api/products
+          curl -f http://$GREEN_URL/api/auth/health
+          
+          # Run basic load test
+          cd scripts
+          API_BASE_URL=http://$GREEN_URL CONCURRENT_USERS=5 REQUESTS_PER_USER=10 TEST_DURATION=30 npm run load-test:basic
+
+      - name: Switch traffic to green
+        run: |
+          # Update service selectors to point to green deployments
+          kubectl patch service frontend -n ecommerce-production -p '{"spec":{"selector":{"app":"frontend-green"}}}'
+          kubectl patch service auth-service -n ecommerce-production -p '{"spec":{"selector":{"app":"auth-service-green"}}}'
+          kubectl patch service product-service -n ecommerce-production -p '{"spec":{"selector":{"app":"product-service-green"}}}'
+          kubectl patch service cart-service -n ecommerce-production -p '{"spec":{"selector":{"app":"cart-service-green"}}}'
+          kubectl patch service order-service -n ecommerce-production -p '{"spec":{"selector":{"app":"order-service-green"}}}'
+          kubectl patch service api-gateway -n ecommerce-production -p '{"spec":{"selector":{"app":"api-gateway-green"}}}'
+          kubectl patch service ml-service -n ecommerce-production -p '{"spec":{"selector":{"app":"ml-service-green"}}}'
+
+      - name: Cleanup old deployments
+        run: |
+          # Wait 5 minutes before cleanup
+          sleep 300
+          
+          # Delete old blue deployments
+          kubectl delete deployment frontend auth-service product-service cart-service order-service api-gateway ml-service -n ecommerce-production --ignore-not-found=true
+
+      - name: Notify production deployment
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          message: |
+            🚀 Production deployment ${{ job.status }}
+            Commit: ${{ github.sha }}
+            Version: ${{ github.ref }}
+            Deployed by: ${{ github.actor }}
+
+  # Rollback Production (Manual trigger)
+  rollback-production:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region us-west-2 --name ecommerce-production
+
+      - name: Rollback deployments
+        run: |
+          kubectl rollout undo deployment/frontend -n ecommerce-production
+          kubectl rollout undo deployment/auth-service -n ecommerce-production
+          kubectl rollout undo deployment/product-service -n ecommerce-production
+          kubectl rollout undo deployment/cart-service -n ecommerce-production
+          kubectl rollout undo deployment/order-service -n ecommerce-production
+          kubectl rollout undo deployment/api-gateway -n ecommerce-production
+          kubectl rollout undo deployment/ml-service -n ecommerce-production
+
+      - name: Verify rollback
+        run: |
+          kubectl rollout status deployment/frontend -n ecommerce-production --timeout=300s
+          kubectl rollout status deployment/auth-service -n ecommerce-production --timeout=300s
+          kubectl rollout status deployment/product-service -n ecommerce-production --timeout=300s
+          kubectl rollout status deployment/cart-service -n ecommerce-production --timeout=300s
+          kubectl rollout status deployment/order-service -n ecommerce-production --timeout=300s
+          kubectl rollout status deployment/api-gateway -n ecommerce-production --timeout=300s
+          kubectl rollout status deployment/ml-service -n ecommerce-production --timeout=300s
+
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          message: |
+            ⚠️ Production rollback completed
+            Triggered by: ${{ github.actor }}
+            Status: ${{ job.status }}

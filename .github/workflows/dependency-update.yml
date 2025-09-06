@@ -1,0 +1,115 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: 
+          - frontend
+          - backend/auth-service
+          - backend/product-service
+          - backend/cart-service
+          - backend/order-service
+          - backend/api-gateway
+          - backend/shared
+          - backend/integration-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Update npm dependencies
+        run: |
+          cd ${{ matrix.service }}
+          npm update
+          npm audit fix --force || true
+
+      - name: Check for changes
+        id: changes
+        run: |
+          cd ${{ matrix.service }}
+          if git diff --quiet package*.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update dependencies for ${{ matrix.service }}"
+          title: "chore: update dependencies for ${{ matrix.service }}"
+          body: |
+            Automated dependency update for ${{ matrix.service }}
+            
+            This PR updates npm dependencies to their latest versions.
+            
+            Please review the changes and ensure all tests pass before merging.
+          branch: dependency-update/${{ matrix.service }}
+          delete-branch: true
+
+  update-python-dependencies:
+    name: Update Python Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Update Python dependencies
+        run: |
+          cd ml-service
+          pip install --upgrade pip
+          pip install pip-tools
+          pip-compile --upgrade requirements.in
+          pip install safety
+          safety check -r requirements.txt || true
+
+      - name: Check for changes
+        id: changes
+        run: |
+          cd ml-service
+          if git diff --quiet requirements.txt; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update Python dependencies for ml-service"
+          title: "chore: update Python dependencies for ml-service"
+          body: |
+            Automated Python dependency update for ml-service
+            
+            This PR updates Python dependencies to their latest versions.
+            
+            Please review the changes and ensure all tests pass before merging.
+          branch: dependency-update/ml-service
+          delete-branch: true

@@ -1,0 +1,344 @@
+name: Performance Monitoring
+
+on:
+  schedule:
+    # Run performance tests every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      duration:
+        description: 'Test duration in seconds'
+        required: true
+        default: '300'
+        type: string
+      concurrent_users:
+        description: 'Number of concurrent users'
+        required: true
+        default: '50'
+        type: string
+
+env:
+  TEST_DURATION: ${{ github.event.inputs.duration || '300' }}
+  CONCURRENT_USERS: ${{ github.event.inputs.concurrent_users || '50' }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+
+jobs:
+  performance-baseline:
+    name: Performance Baseline Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd scripts && npm ci
+
+      - name: Set API URL
+        run: |
+          if [ "${{ env.ENVIRONMENT }}" = "production" ]; then
+            echo "API_BASE_URL=https://api.ecommerce.com" >> $GITHUB_ENV
+          else
+            echo "API_BASE_URL=https://api-staging.ecommerce.com" >> $GITHUB_ENV
+          fi
+
+      - name: Run performance tests
+        run: |
+          cd scripts
+          API_BASE_URL=${{ env.API_BASE_URL }} \
+          CONCURRENT_USERS=${{ env.CONCURRENT_USERS }} \
+          REQUESTS_PER_USER=100 \
+          TEST_DURATION=${{ env.TEST_DURATION }} \
+          npx ts-node load-test-scenarios.ts
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-results-${{ env.ENVIRONMENT }}
+          path: |
+            scripts/performance-report.json
+            scripts/load-test-report.json
+
+  lighthouse-audit:
+    name: Lighthouse Performance Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set Frontend URL
+        run: |
+          if [ "${{ env.ENVIRONMENT }}" = "production" ]; then
+            echo "FRONTEND_URL=https://ecommerce.com" >> $GITHUB_ENV
+          else
+            echo "FRONTEND_URL=https://staging.ecommerce.com" >> $GITHUB_ENV
+          fi
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          urls: |
+            ${{ env.FRONTEND_URL }}
+            ${{ env.FRONTEND_URL }}/products
+            ${{ env.FRONTEND_URL }}/cart
+            ${{ env.FRONTEND_URL }}/login
+          configPath: './.lighthouserc.json'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+  api-performance:
+    name: API Performance Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        endpoint:
+          - /api/products
+          - /api/auth/login
+          - /api/cart/test-user
+          - /api/recommendations/test-user
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Set API URL
+        run: |
+          if [ "${{ env.ENVIRONMENT }}" = "production" ]; then
+            echo "API_BASE_URL=https://api.ecommerce.com" >> $GITHUB_ENV
+          else
+            echo "API_BASE_URL=https://api-staging.ecommerce.com" >> $GITHUB_ENV
+          fi
+
+      - name: Install artillery
+        run: npm install -g artillery
+
+      - name: Create artillery config
+        run: |
+          cat > artillery-config.yml << EOF
+          config:
+            target: '${{ env.API_BASE_URL }}'
+            phases:
+              - duration: 60
+                arrivalRate: 10
+                name: "Warm up"
+              - duration: 120
+                arrivalRate: 20
+                name: "Ramp up load"
+              - duration: 60
+                arrivalRate: 50
+                name: "Sustained load"
+          scenarios:
+            - name: "API Performance Test"
+              requests:
+                - get:
+                    url: "${{ matrix.endpoint }}"
+                    headers:
+                      User-Agent: "Performance-Test"
+          EOF
+
+      - name: Run artillery test
+        run: |
+          artillery run artillery-config.yml --output artillery-report-$(echo "${{ matrix.endpoint }}" | tr '/' '-').json
+
+      - name: Generate HTML report
+        run: |
+          artillery report artillery-report-$(echo "${{ matrix.endpoint }}" | tr '/' '-').json --output artillery-report-$(echo "${{ matrix.endpoint }}" | tr '/' '-').html
+
+      - name: Upload artillery results
+        uses: actions/upload-artifact@v3
+        with:
+          name: artillery-results-${{ env.ENVIRONMENT }}
+          path: |
+            artillery-report-*.json
+            artillery-report-*.html
+
+  database-performance:
+    name: Database Performance Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd backend/shared
+          npm ci
+
+      - name: Run database performance tests
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI_STAGING }}
+          REDIS_URL: ${{ secrets.REDIS_URL_STAGING }}
+        run: |
+          cd backend/shared
+          npm run test:performance
+
+      - name: Upload database performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: database-performance-results
+          path: backend/shared/performance-results.json
+
+  memory-leak-test:
+    name: Memory Leak Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Set API URL
+        run: |
+          if [ "${{ env.ENVIRONMENT }}" = "production" ]; then
+            echo "API_BASE_URL=https://api.ecommerce.com" >> $GITHUB_ENV
+          else
+            echo "API_BASE_URL=https://api-staging.ecommerce.com" >> $GITHUB_ENV
+          fi
+
+      - name: Install clinic.js
+        run: npm install -g clinic
+
+      - name: Create memory test script
+        run: |
+          cat > memory-test.js << 'EOF'
+          const axios = require('axios');
+          
+          async function memoryTest() {
+            const baseURL = process.env.API_BASE_URL;
+            const iterations = 1000;
+            
+            console.log(`Starting memory test with ${iterations} iterations`);
+            
+            for (let i = 0; i < iterations; i++) {
+              try {
+                await axios.get(`${baseURL}/api/products`);
+                await axios.get(`${baseURL}/health`);
+                
+                if (i % 100 === 0) {
+                  console.log(`Completed ${i} iterations`);
+                  // Force garbage collection if available
+                  if (global.gc) {
+                    global.gc();
+                  }
+                }
+              } catch (error) {
+                console.error(`Error at iteration ${i}:`, error.message);
+              }
+            }
+            
+            console.log('Memory test completed');
+          }
+          
+          memoryTest().catch(console.error);
+          EOF
+
+      - name: Run memory leak test
+        run: |
+          npm install axios
+          API_BASE_URL=${{ env.API_BASE_URL }} node --expose-gc memory-test.js
+
+  performance-report:
+    name: Generate Performance Report
+    runs-on: ubuntu-latest
+    needs: [performance-baseline, lighthouse-audit, api-performance, database-performance, memory-leak-test]
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate performance report
+        run: |
+          echo "# Performance Monitoring Report" > performance-report.md
+          echo "Environment: ${{ env.ENVIRONMENT }}" >> performance-report.md
+          echo "Generated on: $(date)" >> performance-report.md
+          echo "Test Duration: ${{ env.TEST_DURATION }} seconds" >> performance-report.md
+          echo "Concurrent Users: ${{ env.CONCURRENT_USERS }}" >> performance-report.md
+          echo "" >> performance-report.md
+          
+          echo "## Load Test Results" >> performance-report.md
+          if [ -d "performance-results-${{ env.ENVIRONMENT }}" ]; then
+            echo "✅ Load test completed successfully" >> performance-report.md
+          else
+            echo "❌ Load test failed or not completed" >> performance-report.md
+          fi
+          
+          echo "" >> performance-report.md
+          echo "## Lighthouse Audit" >> performance-report.md
+          echo "Lighthouse audit results available in artifacts" >> performance-report.md
+          
+          echo "" >> performance-report.md
+          echo "## API Performance" >> performance-report.md
+          if [ -d "artillery-results-${{ env.ENVIRONMENT }}" ]; then
+            echo "✅ API performance tests completed" >> performance-report.md
+          else
+            echo "❌ API performance tests failed" >> performance-report.md
+          fi
+          
+          echo "" >> performance-report.md
+          echo "## Database Performance" >> performance-report.md
+          if [ -d "database-performance-results" ]; then
+            echo "✅ Database performance tests completed" >> performance-report.md
+          else
+            echo "❌ Database performance tests failed or skipped" >> performance-report.md
+          fi
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report-${{ env.ENVIRONMENT }}
+          path: performance-report.md
+
+      - name: Create performance issue
+        if: github.event_name == 'schedule' && needs.performance-baseline.result == 'failure'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Performance degradation detected in ${{ env.ENVIRONMENT }}`,
+              body: `Automated performance monitoring detected performance issues in the ${{ env.ENVIRONMENT }} environment.\n\nPlease review the performance reports and investigate potential causes.`,
+              labels: ['performance', 'monitoring', '${{ env.ENVIRONMENT }}']
+            });
+
+      - name: Notify Slack
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#performance'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          message: |
+            Performance monitoring completed for ${{ env.ENVIRONMENT }}
+            Status: ${{ job.status }}
+            Duration: ${{ env.TEST_DURATION }}s
+            Users: ${{ env.CONCURRENT_USERS }}

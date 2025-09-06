@@ -116,10 +116,17 @@ export CONCURRENT_USERS
 export REQUESTS_PER_USER
 export TEST_DURATION
 
-if run_performance_test "API Load Test" "cd backend/shared && ts-node scripts/load-test.ts"; then
-    load_tests_passed=true
+if run_performance_test "Basic API Load Test" "cd backend/shared && ts-node scripts/load-test.ts"; then
+    basic_load_tests_passed=true
 else
-    load_tests_passed=false
+    basic_load_tests_passed=false
+fi
+
+# Run comprehensive load test scenarios
+if run_performance_test "Comprehensive Load Test Scenarios" "cd scripts && ts-node load-test-scenarios.ts"; then
+    scenario_tests_passed=true
+else
+    scenario_tests_passed=false
 fi
 
 # Run specific endpoint performance tests
@@ -254,7 +261,8 @@ echo "============================================"
 
 test_results=(
     "Unit Performance Tests:$unit_tests_passed"
-    "Load Tests:$load_tests_passed"
+    "Basic Load Tests:$basic_load_tests_passed"
+    "Load Test Scenarios:$scenario_tests_passed"
     "Health Endpoint Tests:$health_tests_passed"
     "Metrics Endpoint Tests:$metrics_tests_passed"
     "Memory Leak Tests:$memory_tests_passed"
