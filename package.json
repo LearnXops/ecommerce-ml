@@ -1,0 +1,31 @@
+{
+  "name": "ecommerce-app",
+  "version": "1.0.0",
+  "description": "Ecommerce application with microservices architecture",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend/*"
+  ],
+  "scripts": {
+    "dev": "docker-compose up --build",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:api-gateway": "npm run dev --workspace=backend/api-gateway",
+    "dev:auth": "npm run dev --workspace=backend/auth-service",
+    "dev:product": "npm run dev --workspace=backend/product-service",
+    "dev:cart": "npm run dev --workspace=backend/cart-service",
+    "dev:order": "npm run dev --workspace=backend/order-service",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "clean": "docker-compose down -v && npm run clean --workspaces"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "concurrently": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
