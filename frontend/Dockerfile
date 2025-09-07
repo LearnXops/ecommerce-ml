@@ -3,11 +3,14 @@ FROM node:18-alpine as development
 
 WORKDIR /app
 
+# Install build dependencies
+RUN apk add --no-cache make gcc g++ python3
+
 # Copy package files
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -27,7 +30,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .

@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
-import { Order } from 'shared/models/Order';
-import { Product } from 'shared/models/Product';
+import { Order } from '../models/Order';
+import { Product } from '../models/Product';
 import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import {
@@ -9,7 +9,7 @@ import {
   updateOrderStatusSchema,
   orderQuerySchema
 } from '../validation/orderValidation';
-import { logger } from 'shared/utils/logger';
+import { logger } from '../utils/logger';
 
 export const createOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const session = await mongoose.startSession();

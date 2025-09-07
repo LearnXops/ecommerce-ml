@@ -63,7 +63,7 @@ jest.mock('stripe', () => {
 });
 
 // Mock shared logger
-jest.mock('shared/utils/logger', () => ({
+jest.mock('@ecommerce/shared/utils/logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),
@@ -73,7 +73,7 @@ jest.mock('shared/utils/logger', () => ({
 }));
 
 // Mock database connection
-jest.mock('shared/database/connection', () => ({
+jest.mock('@ecommerce/shared/database/connection', () => ({
   dbConnection: {
     connect: jest.fn().mockResolvedValue(true),
     disconnect: jest.fn().mockResolvedValue(true),

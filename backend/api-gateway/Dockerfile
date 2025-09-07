@@ -3,14 +3,21 @@ FROM node:18-alpine as development
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install build dependencies
+RUN apk add --no-cache make gcc g++ python3
 
-# Install dependencies
-RUN npm ci
+# Build shared module first
+COPY shared/package*.json ./shared/
+WORKDIR /app/shared
+RUN npm install
+COPY shared/ ./
+RUN npm run build
 
-# Copy source code
-COPY . .
+# Setup api gateway
+WORKDIR /app/api-gateway
+COPY api-gateway/package*.json ./
+RUN npm install --include=dev
+COPY api-gateway/ ./
 
 # Expose port
 EXPOSE 3000
@@ -27,7 +34,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -47,7 +54,7 @@ RUN apk add --no-cache curl
 COPY package*.json ./
 
 # Install production dependencies only
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production && npm cache clean --force
 
 # Copy built application
 COPY --from=build /app/dist ./dist

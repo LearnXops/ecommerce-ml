@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from 'shared/models/User';
+import { User } from '../models/User';
 import { createError } from './errorHandler';
 
 export interface AuthRequest extends Request {
   user?: {
     id: string;
     email: string;
-    role: 'customer' | 'admin';
+    role: 'user' | 'admin';
   };
 }
 

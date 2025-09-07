@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from 'shared/models/User';
-import { logger } from 'shared/utils/logger';
+import { User } from '../models/User';
+import { logger } from '../utils/logger';
 
 // Extend Request interface to include user
 declare global {
@@ -10,7 +10,7 @@ declare global {
       user?: {
         id: string;
         email: string;
-        role: 'customer' | 'admin';
+        role: 'user' | 'admin';
       };
     }
   }

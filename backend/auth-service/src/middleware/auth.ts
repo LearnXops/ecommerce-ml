@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { createError } from './errorHandler';
-import { User } from 'shared';
+import { User } from '@ecommerce/shared/models/User';
 
 export interface AuthRequest extends Request {
   user?: {

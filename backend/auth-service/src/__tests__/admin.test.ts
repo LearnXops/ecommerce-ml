@@ -1,6 +1,6 @@
 import request from 'supertest';
 import app from '../index';
-import { User } from 'shared';
+import { User } from '@ecommerce/shared/models/User';
 import { generateToken } from '../utils/jwt';
 import mongoose from 'mongoose';
 

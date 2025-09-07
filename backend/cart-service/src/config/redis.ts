@@ -1,5 +1,5 @@
 import { createClient } from 'redis';
-import { logger } from 'shared/utils/logger';
+import { logger } from '../utils/logger';
 
 // Redis client configuration
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';

@@ -28,8 +28,8 @@ services:
   # API Gateway
   api-gateway:
     build:
-      context: ./backend/api-gateway
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
       target: development
     ports:
       - "4000:3000"
@@ -43,7 +43,6 @@ services:
       - ML_SERVICE_URL=http://ml-service:3005
     volumes:
       - ./backend/api-gateway:/app
-      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
@@ -68,8 +67,8 @@ services:
   # Authentication Service
   auth-service:
     build:
-      context: ./backend/auth-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: auth-service/Dockerfile
       target: development
     ports:
       - "3001:3001"
@@ -98,8 +97,8 @@ services:
   # Product Service
   product-service:
     build:
-      context: ./backend/product-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: product-service/Dockerfile
       target: development
     ports:
       - "3002:3002"
@@ -109,7 +108,6 @@ services:
       - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_products?authSource=admin
     volumes:
       - ./backend/product-service:/app
-      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
@@ -126,8 +124,8 @@ services:
   # Cart Service
   cart-service:
     build:
-      context: ./backend/cart-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: cart-service/Dockerfile
       target: development
     ports:
       - "3003:3003"
@@ -135,13 +133,15 @@ services:
       - NODE_ENV=development
       - PORT=3003
       - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_products?authSource=admin
     volumes:
       - ./backend/cart-service:/app
-      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
       redis:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
@@ -154,8 +154,8 @@ services:
   # Order Service
   order-service:
     build:
-      context: ./backend/order-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: order-service/Dockerfile
       target: development
     ports:
       - "3004:3004"
@@ -169,7 +169,6 @@ services:
       - EMAIL_PASS=your-app-password
     volumes:
       - ./backend/order-service:/app
-      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:

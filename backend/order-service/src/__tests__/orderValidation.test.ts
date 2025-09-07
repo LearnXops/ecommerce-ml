@@ -5,7 +5,7 @@ import {
   validatePayment,
   validateRefund
 } from '../validation/orderValidation';
-import { OrderStatus, PaymentStatus } from 'shared/types';
+import { OrderStatus, PaymentStatus } from '@ecommerce/shared/types';
 import mongoose from 'mongoose';
 
 describe('Order Validation', () => {

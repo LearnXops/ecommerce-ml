@@ -6,8 +6,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import productRoutes from '../routes/productRoutes';
 import { errorHandler } from '../middleware/errorHandler';
-import { Product } from 'shared/models/Product';
-import { User } from 'shared/models/User';
+import { Product } from '@ecommerce/shared/models/Product';
+import { User } from '@ecommerce/shared/models/User';
 import jwt from 'jsonwebtoken';
 
 describe('Product Service Integration Tests', () => {

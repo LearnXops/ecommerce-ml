@@ -2,15 +2,15 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import app from '../index';
-import { Order } from 'shared/models/Order';
-import { Product } from 'shared/models/Product';
-import { User } from 'shared/models/User';
-import { OrderStatus, PaymentStatus } from 'shared/types';
+import { Order } from '@ecommerce/shared/models/Order';
+import { Product } from '@ecommerce/shared/models/Product';
+import { User } from '@ecommerce/shared/models/User';
+import { OrderStatus, PaymentStatus } from '@ecommerce/shared/types';
 
 // Mock the database models
-jest.mock('shared/models/Order');
-jest.mock('shared/models/Product');
-jest.mock('shared/models/User');
+jest.mock('@ecommerce/shared/models/Order');
+jest.mock('@ecommerce/shared/models/Product');
+jest.mock('@ecommerce/shared/models/User');
 
 const MockedOrder = Order as jest.Mocked<typeof Order>;
 const MockedProduct = Product as jest.Mocked<typeof Product>;

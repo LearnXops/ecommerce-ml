@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { dbConnection } from 'shared/database/connection';
-import { logger } from 'shared/utils/logger';
+import { dbConnection } from './config/database';
+import { logger } from './utils/logger';
 import productRoutes from './routes/productRoutes';
 import { errorHandler } from './middleware/errorHandler';
 

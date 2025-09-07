@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { Product } from 'shared/models/Product';
-import { IProduct, ProductFilter, PaginatedResponse, ApiResponse } from 'shared/types';
-import { logger } from 'shared/utils/logger';
+import { Product } from '../models/Product';
+import { IProduct, ProductFilter, PaginatedResponse, ApiResponse } from '../types';
+import { logger } from '../utils/logger';
 import { validateProduct, validateProductUpdate, validateProductQuery } from '../validation/productValidation';
 
 export class ProductController {

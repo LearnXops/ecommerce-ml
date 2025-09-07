@@ -3,7 +3,8 @@ import { createError } from '../middleware/errorHandler';
 import { generateToken } from '../utils/jwt';
 import { registerSchema, loginSchema, updateProfileSchema } from '../validation/authValidation';
 import { AuthRequest } from '../middleware/auth';
-import { User, logger } from 'shared';
+import { User } from '@ecommerce/shared/models/User';
+import { logger } from '@ecommerce/shared/utils/logger';
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {

@@ -2,8 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { logger } from 'shared/utils/logger';
+import { logger } from './utils/logger';
 import { redisClient } from './config/redis';
+import { connectDatabase, disconnectDatabase } from './config/database';
 import cartRoutes from './routes/cartRoutes';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -28,13 +29,18 @@ app.get('/health', async (req, res) => {
     // Check Redis connection
     const redisStatus = redisClient.isOpen ? 'connected' : 'disconnected';
     
+    // Check MongoDB connection
+    const mongoose = require('mongoose');
+    const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    
     res.status(200).json({
       success: true,
       message: 'Cart service is healthy',
       timestamp: new Date().toISOString(),
       service: 'cart-service',
       version: '1.0.0',
-      redis: redisStatus
+      redis: redisStatus,
+      mongodb: mongoStatus
     });
   } catch (error) {
     res.status(503).json({
@@ -65,6 +71,9 @@ app.use('*', (req, res) => {
 // Start server
 async function startServer() {
   try {
+    // Connect to MongoDB
+    await connectDatabase();
+    
     // Connect to Redis
     await redisClient.connect();
     logger.info('Connected to Redis');
@@ -83,12 +92,14 @@ async function startServer() {
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   await redisClient.quit();
+  await disconnectDatabase();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   await redisClient.quit();
+  await disconnectDatabase();
   process.exit(0);
 });
 

@@ -7,7 +7,7 @@ import rateLimit from 'express-rate-limit';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger, performanceLogger } from './middleware/logger';
-import { logger } from '../../shared/utils/logger';
+import { logger } from '@ecommerce/shared/utils/logger';
 import { 
   compressionMiddleware, 
   responseOptimizationMiddleware,
@@ -15,19 +15,19 @@ import {
   jsonOptimizationMiddleware,
   requestDeduplicationMiddleware,
   requestSizeLimitMiddleware
-} from '../../shared/middleware/compression';
+} from '@ecommerce/shared/middleware/compression';
 import { 
   metricsMiddleware, 
   healthCheckMiddleware,
   recordCustomMetric 
-} from '../../shared/monitoring/metrics';
+} from '@ecommerce/shared/monitoring/metrics';
 import { 
   cacheMiddleware, 
   cacheHealthMiddleware,
   productCacheMiddleware,
   searchCacheMiddleware
-} from '../../shared/middleware/cache';
-import { createCacheInstance } from '../../shared/cache/redis-cache';
+} from '@ecommerce/shared/middleware/cache';
+import { createCacheInstance } from '@ecommerce/shared/cache/redis-cache';
 
 dotenv.config();
 

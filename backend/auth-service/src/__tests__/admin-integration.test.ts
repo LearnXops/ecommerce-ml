@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { User } from 'shared';
+import { User } from '@ecommerce/shared/models/User';
 import { generateToken } from '../utils/jwt';
 import mongoose from 'mongoose';
 

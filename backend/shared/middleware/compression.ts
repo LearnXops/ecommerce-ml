@@ -68,13 +68,14 @@ export function requestSizeLimitMiddleware(maxSize: string = '10mb') {
           path: req.path
         });
         
-        return res.status(413).json({
+        res.status(413).json({
           success: false,
           error: {
             code: 'PAYLOAD_TOO_LARGE',
             message: `Request size exceeds maximum allowed size of ${maxSize}`
           }
         });
+        return;
       }
     }
     

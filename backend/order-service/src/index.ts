@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import connectDB from 'shared/database/connection';
-import { logger } from 'shared/utils/logger';
+import connectDB from './config/database';
+import { logger } from './utils/logger';
 import orderRoutes from './routes/orderRoutes';
 import { errorHandler } from './middleware/errorHandler';
 

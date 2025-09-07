@@ -56,8 +56,8 @@ const consoleFormat = winston.format.combine(
     
     let logLine = `${timestamp} [${service || 'APP'}] ${level}: ${message}`;
     
-    if (requestId) logLine += ` [req:${requestId.slice(-8)}]`;
-    if (userId) logLine += ` [user:${userId.slice(-8)}]`;
+    if (requestId && typeof requestId === 'string') logLine += ` [req:${requestId.slice(-8)}]`;
+    if (userId && typeof userId === 'string') logLine += ` [user:${userId.slice(-8)}]`;
     
     if (Object.keys(meta).length > 0) {
       logLine += ` ${JSON.stringify(meta)}`;

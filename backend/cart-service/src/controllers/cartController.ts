@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { CartRedisService } from '../config/redis';
-import { Product } from 'shared/models/Product';
-import { ICart, CartItem, ApiResponse } from 'shared/types';
-import { logger } from 'shared/utils/logger';
+import { Product, IProduct } from '../models/Product';
+import { ICart, CartItem, ApiResponse } from '../types';
+import { logger } from '../utils/logger';
 import { validateCartItem, validateCartUpdate } from '../validation/cartValidation';
 
 export class CartController {
@@ -30,6 +30,8 @@ export class CartController {
           userId,
           items: [],
           totalAmount: 0,
+          totalItems: 0,
+          createdAt: new Date(),
           updatedAt: new Date()
         };
 
@@ -112,12 +114,12 @@ export class CartController {
       }
 
       // Check inventory
-      if (!product.isActive || product.inventory < quantity) {
+      if (!product.isActive || product.stock < quantity) {
         res.status(400).json({
           success: false,
           error: {
             code: 'INSUFFICIENT_INVENTORY',
-            message: `Only ${product.inventory} items available in stock`
+            message: `Only ${product.stock} items available in stock`
           },
           timestamp: new Date().toISOString()
         });
@@ -145,12 +147,12 @@ export class CartController {
         const newQuantity = cart.items[existingItemIndex].quantity + quantity;
         
         // Check total quantity against inventory
-        if (!product.isActive || product.inventory < newQuantity) {
+        if (!product.isActive || product.stock < newQuantity) {
           res.status(400).json({
             success: false,
             error: {
               code: 'INSUFFICIENT_INVENTORY',
-              message: `Cannot add ${quantity} more items. Only ${product.inventory} total available, ${cart.items[existingItemIndex].quantity} already in cart`
+              message: `Cannot add ${quantity} more items. Only ${product.stock} total available, ${cart.items[existingItemIndex].quantity} already in cart`
             },
             timestamp: new Date().toISOString()
           });
@@ -165,7 +167,7 @@ export class CartController {
           quantity,
           price: product.price,
           name: product.name,
-          image: product.images[0] || undefined
+          image: product.image || undefined
         };
         cart.items.push(cartItem);
       }
@@ -281,12 +283,12 @@ export class CartController {
         }
 
         // Check inventory
-        if (!product.isActive || product.inventory < quantity) {
+        if (!product.isActive || product.stock < quantity) {
           res.status(400).json({
             success: false,
             error: {
               code: 'INSUFFICIENT_INVENTORY',
-              message: `Only ${product.inventory} items available in stock`
+              message: `Only ${product.stock} items available in stock`
             },
             timestamp: new Date().toISOString()
           });
@@ -481,12 +483,12 @@ export class CartController {
         isActive: true 
       });
 
-      const productMap = new Map(products.map(p => [p._id.toString(), p]));
+      const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
       const updatedItems: CartItem[] = [];
       const removedItems: string[] = [];
 
       for (const item of cart.items) {
-        const product = productMap.get(item.productId);
+        const product = productMap.get(item.productId) as any;
         
         if (!product) {
           // Product no longer available
@@ -494,12 +496,12 @@ export class CartController {
           continue;
         }
 
-        if (!product.isActive || product.inventory < item.quantity) {
+        if (!product.isActive || product.stock < item.quantity) {
           // Adjust quantity to available stock
-          if (product.inventory > 0) {
+          if (product.stock > 0) {
             updatedItems.push({
               ...item,
-              quantity: product.inventory,
+              quantity: product.stock,
               price: product.price
             });
           } else {
