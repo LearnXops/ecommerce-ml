@@ -6,21 +6,13 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache make gcc g++ python3
 
-# Build shared module first
-COPY shared/package*.json ./shared/
-WORKDIR /app/shared
-RUN npm install
-COPY shared/ ./
-RUN npm run build
-
 # Setup auth service
-WORKDIR /app/auth-service
-COPY auth-service/package*.json ./
+COPY package*.json ./
 RUN npm install --include=dev
-COPY auth-service/ ./
+COPY . ./
 
 # Expose port
-EXPOSE 3001
+EXPOSE 3000
 
 # Start development server
 CMD ["npm", "run", "dev"]

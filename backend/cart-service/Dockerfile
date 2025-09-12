@@ -6,18 +6,10 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache make gcc g++ python3
 
-# Build shared module first
-COPY shared/package*.json ./shared/
-WORKDIR /app/shared
-RUN npm install
-COPY shared/ ./
-RUN npm run build
-
 # Setup cart service
-WORKDIR /app/cart-service
-COPY cart-service/package*.json ./
+COPY package*.json ./
 RUN npm install --include=dev
-COPY cart-service/ ./
+COPY . ./
 
 # Expose port
 EXPOSE 3003

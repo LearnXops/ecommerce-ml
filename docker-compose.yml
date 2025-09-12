@@ -21,16 +21,16 @@ services:
     networks:
       - ecommerce-network
     depends_on:
-      api-gateway:
-        condition: service_healthy
+      - api-gateway
     restart: unless-stopped
 
   # API Gateway
   api-gateway:
     build:
-      context: ./backend
-      dockerfile: api-gateway/Dockerfile
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
       target: development
+    command: ["node", "src/index.js"]
     ports:
       - "4000:3000"
     environment:
@@ -43,19 +43,15 @@ services:
       - ML_SERVICE_URL=http://ml-service:3005
     volumes:
       - ./backend/api-gateway:/app
+      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
-      auth-service:
-        condition: service_healthy
-      product-service:
-        condition: service_healthy
-      cart-service:
-        condition: service_healthy
-      order-service:
-        condition: service_healthy
-      ml-service:
-        condition: service_healthy
+      - auth-service
+      - product-service
+      - cart-service
+      - order-service
+      - ml-service
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -67,8 +63,8 @@ services:
   # Authentication Service
   auth-service:
     build:
-      context: ./backend
-      dockerfile: auth-service/Dockerfile
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
       target: development
     ports:
       - "3001:3001"
@@ -97,8 +93,8 @@ services:
   # Product Service
   product-service:
     build:
-      context: ./backend
-      dockerfile: product-service/Dockerfile
+      context: ./backend/product-service
+      dockerfile: Dockerfile
       target: development
     ports:
       - "3002:3002"
@@ -108,6 +104,7 @@ services:
       - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_products?authSource=admin
     volumes:
       - ./backend/product-service:/app
+      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
@@ -124,8 +121,8 @@ services:
   # Cart Service
   cart-service:
     build:
-      context: ./backend
-      dockerfile: cart-service/Dockerfile
+      context: ./backend/cart-service
+      dockerfile: Dockerfile
       target: development
     ports:
       - "3003:3003"
@@ -136,6 +133,7 @@ services:
       - MONGODB_URI=mongodb://admin:password@mongodb:27017/ecommerce_products?authSource=admin
     volumes:
       - ./backend/cart-service:/app
+      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
@@ -154,8 +152,8 @@ services:
   # Order Service
   order-service:
     build:
-      context: ./backend
-      dockerfile: order-service/Dockerfile
+      context: ./backend/order-service
+      dockerfile: Dockerfile
       target: development
     ports:
       - "3004:3004"
@@ -169,6 +167,7 @@ services:
       - EMAIL_PASS=your-app-password
     volumes:
       - ./backend/order-service:/app
+      - /app/node_modules
     networks:
       - ecommerce-network
     depends_on:
